@@ -1413,13 +1413,111 @@ def _list_to_day_mask(days: list[str]) -> int:
     return mask
 
 
-def get_calendar(outlook_app, calendar_email: Optional[str] = None):
+def _find_calendar_folders(folder, path_prefix: str = "") -> list[tuple[str, str, Any]]:
+    """
+    Recursively find all calendar folders.
+
+    Returns list of (name, path, folder_object) tuples.
+    """
+    calendars = []
+    current_path = f"{path_prefix}/{folder.Name}" if path_prefix else folder.Name
+
+    # Check if this folder is a calendar (olFolderCalendar = 9)
+    try:
+        if folder.DefaultItemType == OL_ITEM_APPOINTMENT:
+            calendars.append((folder.Name, current_path, folder))
+    except Exception:
+        pass
+
+    # Recurse into subfolders
+    try:
+        for i in range(1, folder.Folders.Count + 1):
+            subfolder = folder.Folders.Item(i)
+            calendars.extend(_find_calendar_folders(subfolder, current_path))
+    except Exception:
+        pass
+
+    return calendars
+
+
+def list_all_calendars(outlook_app) -> list[dict]:
+    """
+    List all calendar folders across all stores.
+
+    Returns:
+        List of dicts with 'name', 'path', 'store', 'entry_id', 'store_id'
+    """
+    namespace = get_namespace(outlook_app)
+    all_calendars = []
+
+    # Iterate through all stores (accounts)
+    for i in range(1, namespace.Stores.Count + 1):
+        store = namespace.Stores.Item(i)
+        store_name = store.DisplayName
+
+        try:
+            root_folder = store.GetRootFolder()
+            calendars = _find_calendar_folders(root_folder)
+
+            for name, path, folder in calendars:
+                try:
+                    all_calendars.append({
+                        "name": name,
+                        "path": path,
+                        "store": store_name,
+                        "entry_id": folder.EntryID,
+                        "store_id": folder.StoreID,
+                    })
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    return all_calendars
+
+
+def get_calendar_by_name(outlook_app, name: str):
+    """
+    Get a calendar folder by name (searches all stores).
+
+    Args:
+        outlook_app: Outlook Application COM object
+        name: Calendar name to search for (case-insensitive)
+
+    Returns:
+        Calendar folder COM object
+
+    Raises:
+        CalendarNotFoundError: If calendar not found
+    """
+    name_lower = name.lower()
+    calendars = list_all_calendars(outlook_app)
+
+    # First try exact match
+    for cal in calendars:
+        if cal["name"].lower() == name_lower:
+            namespace = get_namespace(outlook_app)
+            return namespace.GetFolderFromID(cal["entry_id"], cal["store_id"])
+
+    # Then try partial match
+    for cal in calendars:
+        if name_lower in cal["name"].lower():
+            namespace = get_namespace(outlook_app)
+            return namespace.GetFolderFromID(cal["entry_id"], cal["store_id"])
+
+    raise CalendarNotFoundError(f"Calendar not found: {name}")
+
+
+def get_calendar(outlook_app, calendar_spec: Optional[str] = None):
     """
     Get a calendar folder.
 
     Args:
         outlook_app: Outlook Application COM object
-        calendar_email: Email of shared calendar owner (None for default)
+        calendar_spec: Calendar specifier - can be:
+            - None: default calendar
+            - "by-name:Calendar Name": find by name
+            - email@example.com: shared calendar by email
 
     Returns:
         Calendar folder COM object
@@ -1429,18 +1527,27 @@ def get_calendar(outlook_app, calendar_email: Optional[str] = None):
     """
     namespace = get_namespace(outlook_app)
 
-    if calendar_email:
+    if calendar_spec:
+        # Check for by-name: prefix
+        if calendar_spec.startswith("by-name:"):
+            cal_name = calendar_spec[8:]  # Remove "by-name:" prefix
+            return get_calendar_by_name(outlook_app, cal_name)
+
+        # Try as email address for shared calendar
         try:
-            recipient = namespace.CreateRecipient(calendar_email)
+            recipient = namespace.CreateRecipient(calendar_spec)
             recipient.Resolve()
             if recipient.Resolved:
                 return namespace.GetSharedDefaultFolder(recipient, OL_FOLDER_CALENDAR)
+        except Exception:
+            pass
+
+        # Fall back to by-name search
+        try:
+            return get_calendar_by_name(outlook_app, calendar_spec)
+        except CalendarNotFoundError:
             raise CalendarNotFoundError(
-                f"Could not resolve calendar for: {calendar_email}"
-            )
-        except Exception as e:
-            raise CalendarNotFoundError(
-                f"Could not access calendar for {calendar_email}: {e}"
+                f"Could not resolve calendar for: {calendar_spec}"
             )
 
     return get_default_folder(outlook_app, OL_FOLDER_CALENDAR)

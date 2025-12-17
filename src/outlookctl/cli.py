@@ -624,6 +624,34 @@ def parse_datetime(dt_str: str) -> datetime:
     )
 
 
+def cmd_calendar_calendars(args: argparse.Namespace) -> None:
+    """List all available calendars."""
+    try:
+        outlook = get_outlook_app()
+
+        from outlookctl.outlook_com import list_all_calendars
+        from outlookctl.models import CalendarsResult, CalendarInfo
+
+        calendars = list_all_calendars(outlook)
+
+        result = CalendarsResult(
+            calendars=[
+                CalendarInfo(
+                    name=cal["name"],
+                    path=cal["path"],
+                    store=cal["store"],
+                )
+                for cal in calendars
+            ]
+        )
+        output_json(result.to_dict(), args.output)
+
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except Exception as e:
+        output_error(str(e), "CALENDARS_LIST_ERROR")
+
+
 def cmd_calendar_list(args: argparse.Namespace) -> None:
     """List calendar events."""
     try:
@@ -1294,6 +1322,16 @@ def create_parser() -> argparse.ArgumentParser:
         dest="calendar_command", help="Calendar commands"
     )
 
+    # Calendar calendars (list all calendars)
+    cal_calendars_parser = calendar_subparsers.add_parser(
+        "calendars", help="List all available calendars"
+    )
+    cal_calendars_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_calendars_parser.set_defaults(func=cmd_calendar_calendars)
+
     # Calendar list
     cal_list_parser = calendar_subparsers.add_parser(
         "list", help="List calendar events"
@@ -1309,7 +1347,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Number of days from start (default: 7, ignored if --end is set)"
     )
     cal_list_parser.add_argument(
-        "--calendar", help="Email address for shared calendar"
+        "--calendar",
+        help="Calendar: name, 'by-name:Name', or email for shared calendar"
     )
     cal_list_parser.add_argument(
         "--count", type=int, default=100,

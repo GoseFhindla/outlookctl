@@ -496,6 +496,34 @@ class CalendarListResult:
 
 
 @dataclass
+class CalendarInfo:
+    """Information about a calendar folder."""
+    name: str
+    path: str
+    store: str
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "path": self.path,
+            "store": self.store,
+        }
+
+
+@dataclass
+class CalendarsResult:
+    """Result of listing all available calendars."""
+    version: str = "1.0"
+    calendars: list[CalendarInfo] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "version": self.version,
+            "calendars": [cal.to_dict() for cal in self.calendars],
+        }
+
+
+@dataclass
 class EventCreateResult:
     """Result of creating a calendar event."""
     version: str = "1.0"
