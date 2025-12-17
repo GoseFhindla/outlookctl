@@ -33,6 +33,15 @@ This is **not** a workaround or bypass - it's the standard Windows COM automatio
 - **Respond to invitations** - Accept, decline, or tentatively accept meeting requests
 - **Shared calendars** - Access colleagues' calendars (with permissions)
 
+## Documentation
+
+Full documentation is available at [**docs/index.html**](docs/index.html):
+
+- [CLI Reference](docs/cli.html) - Complete command reference
+- [JSON Schema](docs/json-schema.html) - Output format documentation
+- [Security & Data Handling](docs/security.html) - Security model and best practices
+- [Troubleshooting](docs/troubleshooting.html) - Common issues and solutions
+
 ## Requirements
 
 - Windows workstation with Classic Outlook (not "New Outlook")
@@ -55,7 +64,7 @@ uv sync
 uv run python -m outlookctl.cli doctor
 ```
 
-All checks should pass. If not, see [Troubleshooting](skills/outlook-email-automation/reference/troubleshooting.md).
+All checks should pass. If not, see [Troubleshooting](docs/troubleshooting.html).
 
 ### 3. Test Commands
 
@@ -100,7 +109,7 @@ uv run python -m outlookctl.cli calendar create --subject "Focus Time" --start "
 | `calendar send` | Send meeting invitations |
 | `calendar respond` | Accept/decline/tentative response |
 
-See [CLI Reference](skills/outlook-email-automation/reference/cli.md) for full documentation.
+See [CLI Reference](docs/cli.html) for full documentation.
 
 ## Installing the Claude Code Skill
 
@@ -175,7 +184,7 @@ All commands output JSON:
 }
 ```
 
-See [JSON Schema](skills/outlook-email-automation/reference/json-schema.md) for details.
+See [JSON Schema](docs/json-schema.html) for details.
 
 ## Project Structure
 
@@ -288,7 +297,7 @@ This tool only works with Classic Outlook. Check which version you have:
 | "Message not found" | IDs expire; re-run list/search |
 | Permission denied on CLI | Use `uv run python -m outlookctl.cli` instead |
 
-See [Troubleshooting Guide](skills/outlook-email-automation/reference/troubleshooting.md) for more.
+See [Troubleshooting Guide](docs/troubleshooting.html) for more.
 
 ## Contributing
 
