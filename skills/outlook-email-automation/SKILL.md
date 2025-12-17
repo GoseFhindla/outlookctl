@@ -57,7 +57,7 @@ uv run --project "C:/Users/GordonMickel/work/outlookctl" python -m outlookctl.cl
 | Command | Description |
 |---------|-------------|
 | `calendar calendars` | List all available calendars (including subscribed ICS) |
-| `calendar list` | List calendar events (default: next 7 days) |
+| `calendar list` | List calendar events (default: next 7 days, use --all for all calendars) |
 | `calendar get` | Get event details by ID |
 | `calendar create` | Create an event or meeting (draft by default) |
 | `calendar send` | Send meeting invitations |
