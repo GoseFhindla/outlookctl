@@ -35,12 +35,12 @@ This is **not** a workaround or bypass - it's the standard Windows COM automatio
 
 ## Documentation
 
-Full documentation is available at [**docs/index.html**](docs/index.html):
+Full documentation is available at [**gmickel.github.io/outlookctl**](https://gmickel.github.io/outlookctl/):
 
-- [CLI Reference](docs/cli.html) - Complete command reference
-- [JSON Schema](docs/json-schema.html) - Output format documentation
-- [Security & Data Handling](docs/security.html) - Security model and best practices
-- [Troubleshooting](docs/troubleshooting.html) - Common issues and solutions
+- [CLI Reference](https://gmickel.github.io/outlookctl/cli.html) - Complete command reference
+- [JSON Schema](https://gmickel.github.io/outlookctl/json-schema.html) - Output format documentation
+- [Security & Data Handling](https://gmickel.github.io/outlookctl/security.html) - Security model and best practices
+- [Troubleshooting](https://gmickel.github.io/outlookctl/troubleshooting.html) - Common issues and solutions
 
 ## Requirements
 
@@ -64,7 +64,7 @@ uv sync
 uv run python -m outlookctl.cli doctor
 ```
 
-All checks should pass. If not, see [Troubleshooting](docs/troubleshooting.html).
+All checks should pass. If not, see [Troubleshooting](https://gmickel.github.io/outlookctl/troubleshooting.html).
 
 ### 3. Test Commands
 
@@ -109,7 +109,7 @@ uv run python -m outlookctl.cli calendar create --subject "Focus Time" --start "
 | `calendar send` | Send meeting invitations |
 | `calendar respond` | Accept/decline/tentative response |
 
-See [CLI Reference](docs/cli.html) for full documentation.
+See [CLI Reference](https://gmickel.github.io/outlookctl/cli.html) for full documentation.
 
 ## Installing the Claude Code Skill
 
@@ -184,7 +184,7 @@ All commands output JSON:
 }
 ```
 
-See [JSON Schema](docs/json-schema.html) for details.
+See [JSON Schema](https://gmickel.github.io/outlookctl/json-schema.html) for details.
 
 ## Project Structure
 
@@ -297,7 +297,7 @@ This tool only works with Classic Outlook. Check which version you have:
 | "Message not found" | IDs expire; re-run list/search |
 | Permission denied on CLI | Use `uv run python -m outlookctl.cli` instead |
 
-See [Troubleshooting Guide](docs/troubleshooting.html) for more.
+See [Troubleshooting Guide](https://gmickel.github.io/outlookctl/troubleshooting.html) for more.
 
 ## Contributing
 
