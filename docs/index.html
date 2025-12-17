@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>outlookctl - Local Outlook Automation for Windows</title>
+  <meta name="description" content="Control Outlook from the command line. AI-assisted email and calendar management via Claude Code.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-primary: #0a0e14;
+      --bg-secondary: #0d1117;
+      --bg-tertiary: #161b22;
+      --bg-card: #1a1f26;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-cyan: #00d9ff;
+      --accent-blue: #58a6ff;
+      --accent-purple: #a371f7;
+      --accent-green: #3fb950;
+      --accent-orange: #f0883e;
+      --border-subtle: rgba(255,255,255,0.08);
+      --glow-cyan: rgba(0, 217, 255, 0.15);
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'Outfit', system-ui, sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Grid background */
+    .grid-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(rgba(0, 217, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      background: rgba(10, 14, 20, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-family: var(--font-mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent-cyan);
+    }
+
+    .btn-github {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-github:hover {
+      background: var(--bg-card);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px var(--glow-cyan);
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 120px 0 80px;
+      position: relative;
+    }
+
+    .hero-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .hero-text h1 {
+      font-size: 3.5rem;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-text .tagline {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      line-height: 1.7;
+    }
+
+    .hero-badges {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .badge-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border: none;
+      border-radius: 8px;
+      color: var(--bg-primary);
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 40px rgba(0, 217, 255, 0.3);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px var(--glow-cyan);
+    }
+
+    /* Terminal Demo */
+    .terminal {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.05),
+        0 20px 50px rgba(0,0,0,0.5),
+        0 0 100px var(--glow-cyan);
+    }
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #27c93f; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .terminal-body {
+      padding: 24px;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      min-height: 300px;
+    }
+
+    .terminal-line {
+      opacity: 0;
+      animation: fadeIn 0.5s forwards;
+    }
+
+    .terminal-line:nth-child(1) { animation-delay: 0.2s; }
+    .terminal-line:nth-child(2) { animation-delay: 0.8s; }
+    .terminal-line:nth-child(3) { animation-delay: 1.4s; }
+    .terminal-line:nth-child(4) { animation-delay: 2.0s; }
+    .terminal-line:nth-child(5) { animation-delay: 2.6s; }
+    .terminal-line:nth-child(6) { animation-delay: 3.2s; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .prompt {
+      color: var(--accent-green);
+    }
+
+    .command {
+      color: var(--accent-cyan);
+    }
+
+    .output {
+      color: var(--text-secondary);
+      margin-left: 20px;
+    }
+
+    .highlight {
+      color: var(--accent-orange);
+    }
+
+    /* Features Section */
+    .features {
+      padding: 120px 0;
+      position: relative;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .section-label {
+      display: inline-block;
+      padding: 8px 16px;
+      background: rgba(0, 217, 255, 0.1);
+      border: 1px solid rgba(0, 217, 255, 0.2);
+      border-radius: 100px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 32px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(0, 217, 255, 0.3);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin-top: 16px;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-family: var(--font-mono);
+    }
+
+    .feature-list li::before {
+      content: '>';
+      color: var(--accent-cyan);
+      font-weight: bold;
+    }
+
+    /* Safety Section */
+    .safety {
+      padding: 120px 0;
+      background: var(--bg-secondary);
+      position: relative;
+    }
+
+    .safety-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .safety-content h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+
+    .safety-content p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      line-height: 1.8;
+      margin-bottom: 32px;
+    }
+
+    .safety-steps {
+      list-style: none;
+    }
+
+    .safety-step {
+      display: flex;
+      gap: 16px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .step-number {
+      width: 36px;
+      height: 36px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--accent-cyan);
+      flex-shrink: 0;
+    }
+
+    .step-content h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .step-content p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* Code Block */
+    .code-block {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .code-lang {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .code-copy {
+      padding: 6px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .code-copy:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .code-content {
+      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .code-content .comment {
+      color: var(--text-muted);
+    }
+
+    /* Quick Start Section */
+    .quickstart {
+      padding: 120px 0;
+    }
+
+    .quickstart-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .quickstart-steps {
+      margin-top: 40px;
+    }
+
+    .qs-step {
+      margin-bottom: 32px;
+    }
+
+    .qs-step h3 {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .qs-step h3 span {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      color: var(--bg-primary);
+    }
+
+    /* Footer */
+    footer {
+      padding: 60px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent-cyan);
+    }
+
+    .footer-right {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 968px) {
+      .hero-content {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+
+      .hero-text h1 {
+        font-size: 2.5rem;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .safety-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .footer-content {
+        flex-direction: column;
+        gap: 24px;
+        text-align: center;
+      }
+
+      .footer-left {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <!-- Navigation -->
+  <nav>
+    <div class="container">
+      <a href="#" class="logo">
+        <div class="logo-icon">&#9993;</div>
+        outlookctl
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#safety">Safety</a></li>
+        <li><a href="#quickstart">Quick Start</a></li>
+        <li><a href="https://github.com/gmickel/outlookctl/blob/main/skills/outlook-email-automation/reference/cli.md">Docs</a></li>
+      </ul>
+      <a href="https://github.com/gmickel/outlookctl" class="btn-github">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <div class="hero-text">
+          <h1>Control Outlook from the Command Line</h1>
+          <p class="tagline">
+            Can't access Exchange via Microsoft Graph API? No problem. Control Outlook directly through
+            COM automation on your Windows workstation. Let Claude help manage your email and calendar &mdash;
+            no API keys, no OAuth, just your existing Outlook session.
+          </p>
+          <div class="hero-badges">
+            <span class="badge">
+              <svg class="badge-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm0 22c-5.52 0-10-4.48-10-10S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10zm-1-15h2v6h-2zm0 8h2v2h-2z"/></svg>
+              Windows Only
+            </span>
+            <span class="badge">
+              <svg class="badge-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+              No API Keys
+            </span>
+            <span class="badge">
+              <svg class="badge-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+              Local Only
+            </span>
+            <span class="badge">
+              <svg class="badge-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+              Claude Code Skill
+            </span>
+          </div>
+          <div class="hero-actions">
+            <a href="#quickstart" class="btn-primary">
+              Get Started
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+            </a>
+            <a href="https://github.com/gmickel/outlookctl" class="btn-secondary">
+              View Source
+            </a>
+          </div>
+        </div>
+
+        <!-- Terminal Demo -->
+        <div class="terminal">
+          <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">outlookctl</span>
+          </div>
+          <div class="terminal-body">
+            <div class="terminal-line">
+              <span class="prompt">$</span> <span class="command">outlookctl list --count 3</span>
+            </div>
+            <div class="terminal-line output">
+              <span class="highlight">3 messages</span> from Inbox
+            </div>
+            <div class="terminal-line">
+              <span class="prompt">$</span> <span class="command">outlookctl calendar list --days 7</span>
+            </div>
+            <div class="terminal-line output">
+              <span class="highlight">5 events</span> upcoming
+            </div>
+            <div class="terminal-line">
+              <span class="prompt">$</span> <span class="command">outlookctl draft --to "team@company.com"</span>
+            </div>
+            <div class="terminal-line output">
+              Draft saved to <span class="highlight">Drafts</span> folder
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">Features</span>
+        <h2 class="section-title">Email & Calendar Automation</h2>
+        <p class="section-subtitle">
+          Full control over your Outlook inbox and calendar through a clean CLI interface
+        </p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#9993;</div>
+          <h3>Email Management</h3>
+          <p>List, search, and read emails. Create drafts with AI assistance. Send with explicit confirmation.</p>
+          <ul class="feature-list">
+            <li>list --count 10 --unread-only</li>
+            <li>search --from "boss@company.com"</li>
+            <li>draft --to "team@company.com"</li>
+            <li>attachments save --dest ./files</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">&#128197;</div>
+          <h3>Calendar Control</h3>
+          <p>View upcoming events, create meetings, and respond to invitations. Shared calendar support included.</p>
+          <ul class="feature-list">
+            <li>calendar list --days 14</li>
+            <li>calendar create --subject "Sync"</li>
+            <li>calendar respond --response accept</li>
+            <li>calendar send --confirm-send YES</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">&#129302;</div>
+          <h3>Claude Code Integration</h3>
+          <p>Built-in skill for Claude Code. Let AI help triage your inbox, draft responses, and manage your schedule.</p>
+          <ul class="feature-list">
+            <li>"Summarize my unread emails"</li>
+            <li>"Draft a reply to the latest email"</li>
+            <li>"What meetings do I have today?"</li>
+            <li>"Schedule a meeting with Alice"</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">&#128736;</div>
+          <h3>Developer Friendly</h3>
+          <p>JSON output for easy parsing. Stable message IDs for scripting. Comprehensive error handling.</p>
+          <ul class="feature-list">
+            <li>Structured JSON responses</li>
+            <li>Consistent schema (v1.0)</li>
+            <li>Entry/Store ID references</li>
+            <li>Full error codes & remediation</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Safety Section -->
+  <section class="safety" id="safety">
+    <div class="container">
+      <div class="safety-grid">
+        <div class="safety-content">
+          <span class="section-label">Safety First</span>
+          <h2>Draft-First Workflow</h2>
+          <p>
+            outlookctl is designed to prevent accidental sends. All emails and meeting invitations
+            go through a draft-review-confirm workflow. Nothing leaves your outbox without explicit approval.
+          </p>
+          <ul class="safety-steps">
+            <li class="safety-step">
+              <span class="step-number">1</span>
+              <div class="step-content">
+                <h4>Create Draft</h4>
+                <p>Compose your message or meeting. Saved to Drafts folder.</p>
+              </div>
+            </li>
+            <li class="safety-step">
+              <span class="step-number">2</span>
+              <div class="step-content">
+                <h4>Review</h4>
+                <p>Check recipients, content, and attachments before sending.</p>
+              </div>
+            </li>
+            <li class="safety-step">
+              <span class="step-number">3</span>
+              <div class="step-content">
+                <h4>Confirm Send</h4>
+                <p>Explicit --confirm-send YES required. All sends are logged.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-lang">bash</span>
+            <button class="code-copy">Copy</button>
+          </div>
+          <div class="code-content">
+<span class="comment"># Step 1: Create draft</span>
+outlookctl draft \
+  --to "client@company.com" \
+  --subject "Project Update" \
+  --body-text "Here's the update..."
+
+<span class="comment"># Step 2: Review in Outlook or CLI</span>
+outlookctl get --id &lt;entry_id&gt; --store &lt;store_id&gt;
+
+<span class="comment"># Step 3: Send with explicit confirmation</span>
+outlookctl send \
+  --draft-id &lt;entry_id&gt; \
+  --draft-store &lt;store_id&gt; \
+  --confirm-send YES
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start Section -->
+  <section class="quickstart" id="quickstart">
+    <div class="container">
+      <div class="quickstart-content">
+        <div class="section-header">
+          <span class="section-label">Quick Start</span>
+          <h2 class="section-title">Up and Running in 60 Seconds</h2>
+          <p class="section-subtitle">
+            Clone, sync, and start automating your Outlook
+          </p>
+        </div>
+
+        <div class="quickstart-steps">
+          <div class="qs-step">
+            <h3><span>1</span> Clone the repository</h3>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-lang">bash</span>
+                <button class="code-copy">Copy</button>
+              </div>
+              <div class="code-content">
+git clone https://github.com/gmickel/outlookctl.git
+cd outlookctl
+              </div>
+            </div>
+          </div>
+
+          <div class="qs-step">
+            <h3><span>2</span> Install dependencies</h3>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-lang">bash</span>
+                <button class="code-copy">Copy</button>
+              </div>
+              <div class="code-content">
+uv sync
+              </div>
+            </div>
+          </div>
+
+          <div class="qs-step">
+            <h3><span>3</span> Verify your environment</h3>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-lang">bash</span>
+                <button class="code-copy">Copy</button>
+              </div>
+              <div class="code-content">
+uv run python -m outlookctl.cli doctor
+              </div>
+            </div>
+          </div>
+
+          <div class="qs-step">
+            <h3><span>4</span> Install the Claude Code Skill (optional)</h3>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-lang">bash</span>
+                <button class="code-copy">Copy</button>
+              </div>
+              <div class="code-content">
+uv run python tools/install_skill.py --personal
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-left">
+          <a href="#" class="logo">
+            <div class="logo-icon">&#9993;</div>
+            outlookctl
+          </a>
+          <ul class="footer-links">
+            <li><a href="https://github.com/gmickel/outlookctl">GitHub</a></li>
+            <li><a href="https://github.com/gmickel/outlookctl/blob/main/skills/outlook-email-automation/reference/cli.md">Documentation</a></li>
+            <li><a href="https://github.com/gmickel/outlookctl/issues">Issues</a></li>
+            <li><a href="https://github.com/sponsors/gmickel">Sponsor</a></li>
+          </ul>
+        </div>
+        <div class="footer-right">
+          MIT License &copy; 2025
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Copy button functionality
+    document.querySelectorAll('.code-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.closest('.code-block').querySelector('.code-content').textContent;
+        navigator.clipboard.writeText(code.trim());
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    });
+  </script>
+</body>
+</html>

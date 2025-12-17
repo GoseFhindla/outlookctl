@@ -2,7 +2,7 @@
 Safety gates for send operations.
 
 This module provides confirmation checking and validation for send operations
-to prevent accidental email sending.
+to prevent accidental email sending and meeting invitation sending.
 """
 
 from pathlib import Path

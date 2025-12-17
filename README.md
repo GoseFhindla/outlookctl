@@ -1,6 +1,12 @@
 # outlookctl
 
-Local CLI bridge for Outlook Classic automation on Windows via COM. Includes a Claude Code Skill for AI-assisted email management.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+
+Local CLI bridge for Outlook Classic automation on Windows via COM. Includes a Claude Code Skill for AI-assisted email and calendar management.
+
+> **TL;DR**: Can't access Exchange via Microsoft Graph API? No problem. Control Outlook directly through COM automation on your Windows workstation. Let Claude help manage your email and calendar - no API keys, no OAuth, just your existing Outlook session.
 
 ## What This Is
 
@@ -15,11 +21,17 @@ This is **not** a workaround or bypass - it's the standard Windows COM automatio
 
 ## Use Cases
 
+### Email
 - **AI-assisted email triage** - Let Claude help summarize and categorize your inbox
 - **Automated drafting** - Generate draft responses with AI assistance, review before sending
 - **Email search and retrieval** - Find specific messages across your mailbox
 - **Attachment management** - Bulk save attachments to disk
-- **Workflow automation** - Script repetitive email tasks
+
+### Calendar
+- **View upcoming meetings** - List events across date ranges
+- **Create meetings** - Schedule meetings with attendees (draft-first workflow)
+- **Respond to invitations** - Accept, decline, or tentatively accept meeting requests
+- **Shared calendars** - Access colleagues' calendars (with permissions)
 
 ## Requirements
 
@@ -32,7 +44,7 @@ This is **not** a workaround or bypass - it's the standard Windows COM automatio
 ### 1. Clone and Setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/gmickel/outlookctl.git
 cd outlookctl
 uv sync
 ```
@@ -54,11 +66,19 @@ uv run python -m outlookctl.cli list --count 5
 # Search emails
 uv run python -m outlookctl.cli search --from "someone@example.com" --since 2025-01-01
 
-# Create a draft
+# Create a draft email
 uv run python -m outlookctl.cli draft --to "recipient@example.com" --subject "Test" --body-text "Hello"
+
+# List upcoming calendar events (next 7 days)
+uv run python -m outlookctl.cli calendar list
+
+# Create a calendar event
+uv run python -m outlookctl.cli calendar create --subject "Focus Time" --start "2025-01-20 14:00" --duration 60
 ```
 
 ## CLI Commands
+
+### Email Commands
 
 | Command | Description |
 |---------|-------------|
@@ -70,11 +90,21 @@ uv run python -m outlookctl.cli draft --to "recipient@example.com" --subject "Te
 | `send` | Send a draft or new message |
 | `attachments save` | Save attachments to disk |
 
+### Calendar Commands
+
+| Command | Description |
+|---------|-------------|
+| `calendar list` | List events in a date range |
+| `calendar get` | Get event details by ID |
+| `calendar create` | Create an event or meeting |
+| `calendar send` | Send meeting invitations |
+| `calendar respond` | Accept/decline/tentative response |
+
 See [CLI Reference](skills/outlook-email-automation/reference/cli.md) for full documentation.
 
 ## Installing the Claude Code Skill
 
-The skill enables Claude to assist with email operations safely.
+The skill enables Claude to assist with email and calendar operations safely.
 
 ### Personal Installation
 
@@ -102,8 +132,8 @@ uv run python tools/install_skill.py --verify --personal
 
 `outlookctl` is designed with safety as a priority:
 
-1. **Draft-First Workflow** - Create drafts, review, then send
-2. **Explicit Confirmation** - Sending requires `--confirm-send YES`
+1. **Draft-First Workflow** - Create drafts/meetings, review, then send
+2. **Explicit Confirmation** - Sending emails/meeting invites requires `--confirm-send YES`
 3. **Metadata by Default** - Body content only retrieved on explicit request
 4. **Audit Logging** - Send operations logged to `%LOCALAPPDATA%/outlookctl/audit.log`
 
@@ -173,6 +203,7 @@ outlookctl/
 │   └── install_skill.py        # Skill installer
 ├── tests/                      # pytest test suite
 │   ├── test_models.py
+│   ├── test_calendar_models.py
 │   └── test_safety.py
 └── evals/                      # Skill evaluation scenarios
     ├── eval_summarize.md
@@ -259,6 +290,24 @@ This tool only works with Classic Outlook. Check which version you have:
 
 See [Troubleshooting Guide](skills/outlook-email-automation/reference/troubleshooting.md) for more.
 
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests (`uv run python -m pytest tests/ -v`)
+5. Commit (`git commit -m 'Add amazing feature'`)
+6. Push (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- Built for use with [Claude Code](https://claude.ai/code)
+- Powered by [pywin32](https://github.com/mhammond/pywin32) for COM automation
+- Package management via [uv](https://docs.astral.sh/uv/)

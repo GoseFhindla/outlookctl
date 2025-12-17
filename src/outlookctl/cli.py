@@ -20,6 +20,12 @@ from .models import (
     ErrorResult,
     FolderInfo,
     MessageId,
+    # Calendar models
+    CalendarListResult,
+    EventCreateResult,
+    EventSendResult,
+    EventRespondResult,
+    EventId,
 )
 from .outlook_com import (
     get_outlook_app,
@@ -37,6 +43,15 @@ from .outlook_com import (
     OutlookNotAvailableError,
     FolderNotFoundError,
     MessageNotFoundError,
+    # Calendar functions
+    list_events,
+    get_event_by_id,
+    extract_event_detail,
+    create_event,
+    send_meeting_invites,
+    respond_to_meeting,
+    EventNotFoundError,
+    CalendarNotFoundError,
 )
 from .safety import (
     validate_send_confirmation,
@@ -394,6 +409,244 @@ def cmd_attachments_save(args: argparse.Namespace) -> None:
         output_error(str(e), "ATTACHMENT_ERROR")
 
 
+# =============================================================================
+# Calendar Commands
+# =============================================================================
+
+
+def parse_datetime(dt_str: str) -> datetime:
+    """Parse a datetime string in various formats."""
+    formats = [
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Invalid datetime format: {dt_str}. "
+        "Use 'YYYY-MM-DD HH:MM' or 'YYYY-MM-DD'."
+    )
+
+
+def cmd_calendar_list(args: argparse.Namespace) -> None:
+    """List calendar events."""
+    try:
+        outlook = get_outlook_app()
+
+        # Determine date range
+        from datetime import timedelta
+        if args.start:
+            start_date = parse_datetime(args.start)
+        else:
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if args.end:
+            end_date = parse_datetime(args.end)
+        elif args.days:
+            end_date = start_date + timedelta(days=args.days)
+        else:
+            end_date = start_date + timedelta(days=7)
+
+        events = list(list_events(
+            outlook,
+            start_date=start_date,
+            end_date=end_date,
+            calendar_email=args.calendar,
+            count=args.count,
+        ))
+
+        result = CalendarListResult(
+            calendar=args.calendar or "Calendar",
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            items=events,
+        )
+        output_json(result.to_dict(), args.output)
+
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except CalendarNotFoundError as e:
+        output_error(str(e), "CALENDAR_NOT_FOUND")
+    except Exception as e:
+        output_error(str(e), "CALENDAR_LIST_ERROR")
+
+
+def cmd_calendar_get(args: argparse.Namespace) -> None:
+    """Get a single calendar event by ID."""
+    try:
+        outlook = get_outlook_app()
+        appt = get_event_by_id(outlook, args.id, args.store)
+
+        detail = extract_event_detail(
+            appt,
+            include_body=args.include_body,
+        )
+
+        output_json({"version": "1.0", **detail.to_dict()}, args.output)
+
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except EventNotFoundError as e:
+        output_error(str(e), "EVENT_NOT_FOUND")
+    except Exception as e:
+        output_error(str(e), "CALENDAR_GET_ERROR")
+
+
+def cmd_calendar_create(args: argparse.Namespace) -> None:
+    """Create a calendar event."""
+    try:
+        outlook = get_outlook_app()
+
+        # Parse start time
+        start = parse_datetime(args.start)
+
+        # Parse end time if provided
+        end = parse_datetime(args.end) if args.end else None
+
+        # Parse attendees
+        attendees = [a.strip() for a in args.attendees.split(",")] if args.attendees else None
+        optional_attendees = [a.strip() for a in args.optional_attendees.split(",")] if args.optional_attendees else None
+
+        entry_id, store_id, has_attendees = create_event(
+            outlook,
+            subject=args.subject,
+            start=start,
+            duration=args.duration,
+            end=end,
+            location=args.location or "",
+            body=args.body or "",
+            attendees=attendees,
+            optional_attendees=optional_attendees,
+            all_day=args.all_day,
+            reminder_minutes=args.reminder,
+            busy_status=args.busy_status or "busy",
+            teams_url=args.teams_url,
+            recurrence=args.recurrence,
+        )
+
+        # If --send-now is specified with proper confirmation, send immediately
+        send_now = False
+        if args.send_now and has_attendees:
+            validate_send_confirmation(args.confirm_send, None)
+            send_meeting_invites(outlook, entry_id, store_id)
+            send_now = True
+
+        result = EventCreateResult(
+            success=True,
+            id=EventId(entry_id=entry_id, store_id=store_id),
+            saved_to="Calendar",
+            subject=args.subject,
+            start=start.isoformat(),
+            attendees=(attendees or []) + (optional_attendees or []),
+            is_draft=has_attendees and not send_now,
+        )
+        output_json(result.to_dict(), args.output)
+
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except ValueError as e:
+        output_error(str(e), "VALIDATION_ERROR")
+    except OutlookError as e:
+        output_error(str(e), "CALENDAR_CREATE_ERROR")
+    except Exception as e:
+        output_error(str(e), "CALENDAR_CREATE_ERROR")
+
+
+def cmd_calendar_send(args: argparse.Namespace) -> None:
+    """Send meeting invitations for an existing calendar event."""
+    try:
+        # Validate confirmation
+        validate_send_confirmation(args.confirm_send, args.confirm_send_file)
+
+        outlook = get_outlook_app()
+
+        # Get event info for response
+        appt = get_event_by_id(outlook, args.id, args.store)
+        subject = str(appt.Subject)
+        attendees = []
+        for r in appt.Recipients:
+            try:
+                attendees.append(str(r.Address))
+            except Exception:
+                attendees.append(str(r.Name))
+
+        send_meeting_invites(outlook, args.id, args.store)
+
+        result = EventSendResult(
+            success=True,
+            message="Meeting invitations sent",
+            sent_at=datetime.now().isoformat(),
+            attendees=attendees,
+            subject=subject,
+        )
+        output_json(result.to_dict(), args.output)
+
+    except SendConfirmationError as e:
+        output_error(str(e), "CONFIRMATION_REQUIRED")
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except EventNotFoundError as e:
+        output_error(str(e), "EVENT_NOT_FOUND")
+    except OutlookError as e:
+        output_error(str(e), "CALENDAR_SEND_ERROR")
+    except Exception as e:
+        output_error(str(e), "CALENDAR_SEND_ERROR")
+
+
+def cmd_calendar_respond(args: argparse.Namespace) -> None:
+    """Respond to a meeting invitation."""
+    try:
+        outlook = get_outlook_app()
+
+        # Validate response value
+        response = args.response.lower()
+        if response not in ("accept", "decline", "tentative"):
+            raise ValueError(
+                f"Invalid response '{response}'. Must be 'accept', 'decline', or 'tentative'."
+            )
+
+        # Get event info for response
+        appt = get_event_by_id(outlook, args.id, args.store)
+        subject = str(appt.Subject)
+        try:
+            organizer = str(appt.Organizer)
+        except Exception:
+            organizer = None
+
+        respond_to_meeting(
+            outlook,
+            args.id,
+            args.store,
+            response=response,
+            send_response=not args.no_response,
+        )
+
+        result = EventRespondResult(
+            success=True,
+            response=response,
+            subject=subject,
+            organizer=organizer,
+        )
+        output_json(result.to_dict(), args.output)
+
+    except OutlookNotAvailableError as e:
+        output_error(str(e), "OUTLOOK_UNAVAILABLE", "Start Classic Outlook and try again.")
+    except EventNotFoundError as e:
+        output_error(str(e), "EVENT_NOT_FOUND")
+    except ValueError as e:
+        output_error(str(e), "VALIDATION_ERROR")
+    except OutlookError as e:
+        output_error(str(e), "CALENDAR_RESPOND_ERROR")
+    except Exception as e:
+        output_error(str(e), "CALENDAR_RESPOND_ERROR")
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
@@ -647,6 +900,171 @@ def create_parser() -> argparse.ArgumentParser:
     )
     save_parser.set_defaults(func=cmd_attachments_save)
 
+    # =========================================================================
+    # Calendar subcommand
+    # =========================================================================
+    calendar_parser = subparsers.add_parser(
+        "calendar", help="Calendar operations"
+    )
+    calendar_subparsers = calendar_parser.add_subparsers(
+        dest="calendar_command", help="Calendar commands"
+    )
+
+    # Calendar list
+    cal_list_parser = calendar_subparsers.add_parser(
+        "list", help="List calendar events"
+    )
+    cal_list_parser.add_argument(
+        "--start", help="Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM)"
+    )
+    cal_list_parser.add_argument(
+        "--end", help="End date (YYYY-MM-DD or YYYY-MM-DD HH:MM)"
+    )
+    cal_list_parser.add_argument(
+        "--days", type=int,
+        help="Number of days from start (default: 7, ignored if --end is set)"
+    )
+    cal_list_parser.add_argument(
+        "--calendar", help="Email address for shared calendar"
+    )
+    cal_list_parser.add_argument(
+        "--count", type=int, default=100,
+        help="Maximum events to return (default: 100)"
+    )
+    cal_list_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_list_parser.set_defaults(func=cmd_calendar_list)
+
+    # Calendar get
+    cal_get_parser = calendar_subparsers.add_parser(
+        "get", help="Get a single calendar event by ID"
+    )
+    cal_get_parser.add_argument(
+        "--id", required=True, help="Event entry ID"
+    )
+    cal_get_parser.add_argument(
+        "--store", required=True, help="Event store ID"
+    )
+    cal_get_parser.add_argument(
+        "--include-body", action="store_true",
+        help="Include event body/description"
+    )
+    cal_get_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_get_parser.set_defaults(func=cmd_calendar_get)
+
+    # Calendar create
+    cal_create_parser = calendar_subparsers.add_parser(
+        "create", help="Create a calendar event"
+    )
+    cal_create_parser.add_argument(
+        "--subject", required=True, help="Event subject/title"
+    )
+    cal_create_parser.add_argument(
+        "--start", required=True,
+        help="Start time (YYYY-MM-DD HH:MM or YYYY-MM-DD for all-day)"
+    )
+    cal_create_parser.add_argument(
+        "--duration", type=int, default=60,
+        help="Duration in minutes (default: 60, ignored if --end is set)"
+    )
+    cal_create_parser.add_argument(
+        "--end", help="End time (YYYY-MM-DD HH:MM)"
+    )
+    cal_create_parser.add_argument(
+        "--location", help="Event location"
+    )
+    cal_create_parser.add_argument(
+        "--body", help="Event description/body"
+    )
+    cal_create_parser.add_argument(
+        "--attendees", help="Required attendees (comma-separated emails)"
+    )
+    cal_create_parser.add_argument(
+        "--optional-attendees", help="Optional attendees (comma-separated emails)"
+    )
+    cal_create_parser.add_argument(
+        "--all-day", action="store_true",
+        help="Create as all-day event"
+    )
+    cal_create_parser.add_argument(
+        "--reminder", type=int, default=15,
+        help="Reminder minutes before event (default: 15)"
+    )
+    cal_create_parser.add_argument(
+        "--busy-status", choices=["free", "tentative", "busy", "out_of_office", "working_elsewhere"],
+        default="busy", help="Show as status (default: busy)"
+    )
+    cal_create_parser.add_argument(
+        "--teams-url", help="Teams meeting URL to include in body"
+    )
+    cal_create_parser.add_argument(
+        "--recurrence",
+        help="Recurrence pattern (e.g., 'weekly:monday,wednesday:until:2025-12-31')"
+    )
+    cal_create_parser.add_argument(
+        "--send-now", action="store_true",
+        help="Send meeting invites immediately (requires --confirm-send YES)"
+    )
+    cal_create_parser.add_argument(
+        "--confirm-send", help="Confirmation string (must be 'YES') for --send-now"
+    )
+    cal_create_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_create_parser.set_defaults(func=cmd_calendar_create)
+
+    # Calendar send (send meeting invites)
+    cal_send_parser = calendar_subparsers.add_parser(
+        "send", help="Send meeting invitations for an existing event"
+    )
+    cal_send_parser.add_argument(
+        "--id", required=True, help="Event entry ID"
+    )
+    cal_send_parser.add_argument(
+        "--store", required=True, help="Event store ID"
+    )
+    cal_send_parser.add_argument(
+        "--confirm-send", help="Confirmation string (must be exactly 'YES')"
+    )
+    cal_send_parser.add_argument(
+        "--confirm-send-file", help="Path to file containing confirmation string"
+    )
+    cal_send_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_send_parser.set_defaults(func=cmd_calendar_send)
+
+    # Calendar respond
+    cal_respond_parser = calendar_subparsers.add_parser(
+        "respond", help="Respond to a meeting invitation"
+    )
+    cal_respond_parser.add_argument(
+        "--id", required=True, help="Event entry ID"
+    )
+    cal_respond_parser.add_argument(
+        "--store", required=True, help="Event store ID"
+    )
+    cal_respond_parser.add_argument(
+        "--response", required=True, choices=["accept", "decline", "tentative"],
+        help="Response type"
+    )
+    cal_respond_parser.add_argument(
+        "--no-response", action="store_true",
+        help="Don't send response to organizer"
+    )
+    cal_respond_parser.add_argument(
+        "--output", choices=["json", "text"], default="json",
+        help="Output format (default: json)"
+    )
+    cal_respond_parser.set_defaults(func=cmd_calendar_respond)
+
     return parser
 
 
@@ -662,6 +1080,11 @@ def main() -> None:
     # Handle attachments subcommand
     if args.command == "attachments" and not args.attachments_command:
         parser.parse_args(["attachments", "-h"])
+        sys.exit(1)
+
+    # Handle calendar subcommand
+    if args.command == "calendar" and not args.calendar_command:
+        parser.parse_args(["calendar", "-h"])
         sys.exit(1)
 
     if hasattr(args, "func"):

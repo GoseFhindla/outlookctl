@@ -21,6 +21,12 @@ from .models import (
     MessageDetail,
     DoctorCheck,
     DoctorResult,
+    # Calendar models
+    EventId,
+    Attendee,
+    RecurrenceInfo,
+    EventSummary,
+    EventDetail,
 )
 
 
@@ -31,6 +37,7 @@ OL_FOLDER_DRAFTS = 16
 OL_FOLDER_DELETED_ITEMS = 3
 OL_FOLDER_OUTBOX = 4
 OL_FOLDER_JUNK = 23
+OL_FOLDER_CALENDAR = 9
 
 # Map of common folder names to constants
 FOLDER_MAP = {
@@ -40,7 +47,61 @@ FOLDER_MAP = {
     "deleted": OL_FOLDER_DELETED_ITEMS,
     "outbox": OL_FOLDER_OUTBOX,
     "junk": OL_FOLDER_JUNK,
+    "calendar": OL_FOLDER_CALENDAR,
 }
+
+# Outlook item type constants
+OL_ITEM_MAIL = 0
+OL_ITEM_APPOINTMENT = 1
+
+# Outlook meeting status constants
+OL_MEETING_STATUS_NONMEETING = 0
+OL_MEETING_STATUS_MEETING = 1
+OL_MEETING_STATUS_RECEIVED = 3
+OL_MEETING_STATUS_CANCELED = 5
+
+# Outlook response status constants
+OL_RESPONSE_NONE = 0
+OL_RESPONSE_ORGANIZER = 1
+OL_RESPONSE_TENTATIVE = 2
+OL_RESPONSE_ACCEPTED = 3
+OL_RESPONSE_DECLINED = 4
+
+# Outlook busy status constants
+OL_BUSY_FREE = 0
+OL_BUSY_TENTATIVE = 1
+OL_BUSY_BUSY = 2
+OL_BUSY_OUT_OF_OFFICE = 3
+OL_BUSY_WORKING_ELSEWHERE = 4
+
+# Outlook recurrence type constants
+OL_RECURS_DAILY = 0
+OL_RECURS_WEEKLY = 1
+OL_RECURS_MONTHLY = 2
+OL_RECURS_MONTHLY_NTH = 3
+OL_RECURS_YEARLY = 5
+OL_RECURS_YEARLY_NTH = 6
+
+# Day of week mask constants
+OL_SUNDAY = 1
+OL_MONDAY = 2
+OL_TUESDAY = 4
+OL_WEDNESDAY = 8
+OL_THURSDAY = 16
+OL_FRIDAY = 32
+OL_SATURDAY = 64
+
+DAY_OF_WEEK_MAP = {
+    "sunday": OL_SUNDAY,
+    "monday": OL_MONDAY,
+    "tuesday": OL_TUESDAY,
+    "wednesday": OL_WEDNESDAY,
+    "thursday": OL_THURSDAY,
+    "friday": OL_FRIDAY,
+    "saturday": OL_SATURDAY,
+}
+
+DAY_OF_WEEK_REVERSE = {v: k for k, v in DAY_OF_WEEK_MAP.items()}
 
 # Common Outlook installation paths
 OUTLOOK_PATHS = [
@@ -73,6 +134,16 @@ class FolderNotFoundError(OutlookError):
 
 class MessageNotFoundError(OutlookError):
     """Raised when a message cannot be found."""
+    pass
+
+
+class EventNotFoundError(OutlookError):
+    """Raised when a calendar event cannot be found."""
+    pass
+
+
+class CalendarNotFoundError(OutlookError):
+    """Raised when a calendar cannot be found."""
     pass
 
 
@@ -1030,3 +1101,606 @@ def run_doctor() -> DoctorResult:
         checks=checks,
         outlook_path=outlook_path,
     )
+
+
+# =============================================================================
+# Calendar Functions
+# =============================================================================
+
+
+def _response_status_to_string(status: int) -> str:
+    """Convert Outlook response status to string."""
+    mapping = {
+        OL_RESPONSE_NONE: "none",
+        OL_RESPONSE_ORGANIZER: "organizer",
+        OL_RESPONSE_TENTATIVE: "tentative",
+        OL_RESPONSE_ACCEPTED: "accepted",
+        OL_RESPONSE_DECLINED: "declined",
+    }
+    return mapping.get(status, "none")
+
+
+def _busy_status_to_string(status: int) -> str:
+    """Convert Outlook busy status to string."""
+    mapping = {
+        OL_BUSY_FREE: "free",
+        OL_BUSY_TENTATIVE: "tentative",
+        OL_BUSY_BUSY: "busy",
+        OL_BUSY_OUT_OF_OFFICE: "out_of_office",
+        OL_BUSY_WORKING_ELSEWHERE: "working_elsewhere",
+    }
+    return mapping.get(status, "busy")
+
+
+def _recurrence_type_to_string(rec_type: int) -> str:
+    """Convert Outlook recurrence type to string."""
+    mapping = {
+        OL_RECURS_DAILY: "daily",
+        OL_RECURS_WEEKLY: "weekly",
+        OL_RECURS_MONTHLY: "monthly",
+        OL_RECURS_MONTHLY_NTH: "monthly_nth",
+        OL_RECURS_YEARLY: "yearly",
+        OL_RECURS_YEARLY_NTH: "yearly_nth",
+    }
+    return mapping.get(rec_type, "unknown")
+
+
+def _day_mask_to_list(mask: int) -> list[str]:
+    """Convert day of week mask to list of day names."""
+    days = []
+    for day_name, day_value in DAY_OF_WEEK_MAP.items():
+        if mask & day_value:
+            days.append(day_name)
+    return days
+
+
+def _list_to_day_mask(days: list[str]) -> int:
+    """Convert list of day names to day of week mask."""
+    mask = 0
+    for day in days:
+        day_lower = day.lower()
+        if day_lower in DAY_OF_WEEK_MAP:
+            mask |= DAY_OF_WEEK_MAP[day_lower]
+    return mask
+
+
+def get_calendar(outlook_app, calendar_email: Optional[str] = None):
+    """
+    Get a calendar folder.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        calendar_email: Email of shared calendar owner (None for default)
+
+    Returns:
+        Calendar folder COM object
+
+    Raises:
+        CalendarNotFoundError: If calendar not found
+    """
+    namespace = get_namespace(outlook_app)
+
+    if calendar_email:
+        try:
+            recipient = namespace.CreateRecipient(calendar_email)
+            recipient.Resolve()
+            if recipient.Resolved:
+                return namespace.GetSharedDefaultFolder(recipient, OL_FOLDER_CALENDAR)
+            raise CalendarNotFoundError(
+                f"Could not resolve calendar for: {calendar_email}"
+            )
+        except Exception as e:
+            raise CalendarNotFoundError(
+                f"Could not access calendar for {calendar_email}: {e}"
+            )
+
+    return get_default_folder(outlook_app, OL_FOLDER_CALENDAR)
+
+
+def get_event_by_id(outlook_app, entry_id: str, store_id: str):
+    """
+    Get a calendar event by its entry ID and store ID.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        entry_id: Event entry ID
+        store_id: Store ID
+
+    Returns:
+        AppointmentItem COM object
+
+    Raises:
+        EventNotFoundError: If event not found
+    """
+    try:
+        namespace = get_namespace(outlook_app)
+        return namespace.GetItemFromID(entry_id, store_id)
+    except Exception as e:
+        raise EventNotFoundError(
+            f"Event not found with entry_id={entry_id}: {e}"
+        )
+
+
+def extract_recurrence_info(appt_item) -> Optional[RecurrenceInfo]:
+    """Extract recurrence information from an appointment."""
+    try:
+        if not appt_item.IsRecurring:
+            return None
+
+        pattern = appt_item.GetRecurrencePattern()
+        rec_type = _recurrence_type_to_string(pattern.RecurrenceType)
+
+        return RecurrenceInfo(
+            type=rec_type,
+            interval=pattern.Interval,
+            days_of_week=_day_mask_to_list(pattern.DayOfWeekMask) if pattern.DayOfWeekMask else [],
+            day_of_month=pattern.DayOfMonth if hasattr(pattern, "DayOfMonth") else None,
+            month_of_year=pattern.MonthOfYear if hasattr(pattern, "MonthOfYear") else None,
+            instance=pattern.Instance if hasattr(pattern, "Instance") else None,
+            end_date=format_datetime(pattern.PatternEndDate) if not pattern.NoEndDate else None,
+            occurrences=pattern.Occurrences if pattern.Occurrences > 0 else None,
+        )
+    except Exception:
+        return None
+
+
+def extract_attendees(appt_item) -> list[Attendee]:
+    """Extract attendees from an appointment."""
+    attendees = []
+    try:
+        for i in range(1, appt_item.Recipients.Count + 1):
+            recip = appt_item.Recipients.Item(i)
+            addr = extract_email_address(recip)
+
+            # Determine attendee type
+            if recip.Type == 1:
+                attendee_type = "required"
+            elif recip.Type == 2:
+                attendee_type = "optional"
+            elif recip.Type == 3:
+                attendee_type = "resource"
+            else:
+                attendee_type = "required"
+
+            # Get response status
+            response = "none"
+            try:
+                meeting_response = recip.MeetingResponseStatus
+                response = _response_status_to_string(meeting_response)
+            except Exception:
+                pass
+
+            attendees.append(Attendee(
+                name=addr.name,
+                email=addr.email,
+                type=attendee_type,
+                response=response,
+            ))
+    except Exception:
+        pass
+    return attendees
+
+
+def extract_event_summary(appt_item) -> EventSummary:
+    """
+    Extract an EventSummary from an AppointmentItem COM object.
+
+    Args:
+        appt_item: Outlook AppointmentItem COM object
+
+    Returns:
+        EventSummary object
+    """
+    organizer = ""
+    try:
+        organizer = str(appt_item.Organizer or "")
+    except Exception:
+        pass
+
+    is_meeting = False
+    try:
+        is_meeting = appt_item.MeetingStatus != OL_MEETING_STATUS_NONMEETING
+    except Exception:
+        pass
+
+    response_status = "none"
+    try:
+        response_status = _response_status_to_string(appt_item.ResponseStatus)
+    except Exception:
+        pass
+
+    busy_status = "busy"
+    try:
+        busy_status = _busy_status_to_string(appt_item.BusyStatus)
+    except Exception:
+        pass
+
+    return EventSummary(
+        id=EventId(
+            entry_id=str(appt_item.EntryID),
+            store_id=str(appt_item.Parent.StoreID),
+        ),
+        subject=str(appt_item.Subject or ""),
+        start=format_datetime(appt_item.Start),
+        end=format_datetime(appt_item.End),
+        location=str(appt_item.Location or ""),
+        organizer=organizer,
+        is_recurring=bool(appt_item.IsRecurring),
+        is_all_day=bool(appt_item.AllDayEvent),
+        is_meeting=is_meeting,
+        response_status=response_status,
+        busy_status=busy_status,
+    )
+
+
+def extract_event_detail(
+    appt_item,
+    include_body: bool = False,
+) -> EventDetail:
+    """
+    Extract full EventDetail from an AppointmentItem COM object.
+
+    Args:
+        appt_item: Outlook AppointmentItem COM object
+        include_body: Whether to include body
+
+    Returns:
+        EventDetail object
+    """
+    organizer = ""
+    try:
+        organizer = str(appt_item.Organizer or "")
+    except Exception:
+        pass
+
+    is_meeting = False
+    try:
+        is_meeting = appt_item.MeetingStatus != OL_MEETING_STATUS_NONMEETING
+    except Exception:
+        pass
+
+    response_status = "none"
+    try:
+        response_status = _response_status_to_string(appt_item.ResponseStatus)
+    except Exception:
+        pass
+
+    busy_status = "busy"
+    try:
+        busy_status = _busy_status_to_string(appt_item.BusyStatus)
+    except Exception:
+        pass
+
+    body = None
+    if include_body:
+        try:
+            body = str(appt_item.Body or "")
+        except Exception:
+            pass
+
+    categories = []
+    try:
+        cat_str = str(appt_item.Categories or "")
+        if cat_str:
+            categories = [c.strip() for c in cat_str.split(",")]
+    except Exception:
+        pass
+
+    reminder_minutes = None
+    try:
+        if appt_item.ReminderSet:
+            reminder_minutes = appt_item.ReminderMinutesBeforeStart
+    except Exception:
+        pass
+
+    sensitivity = "normal"
+    try:
+        sens_map = {0: "normal", 1: "personal", 2: "private", 3: "confidential"}
+        sensitivity = sens_map.get(appt_item.Sensitivity, "normal")
+    except Exception:
+        pass
+
+    return EventDetail(
+        id=EventId(
+            entry_id=str(appt_item.EntryID),
+            store_id=str(appt_item.Parent.StoreID),
+        ),
+        subject=str(appt_item.Subject or ""),
+        start=format_datetime(appt_item.Start),
+        end=format_datetime(appt_item.End),
+        location=str(appt_item.Location or ""),
+        organizer=organizer,
+        is_recurring=bool(appt_item.IsRecurring),
+        is_all_day=bool(appt_item.AllDayEvent),
+        is_meeting=is_meeting,
+        response_status=response_status,
+        busy_status=busy_status,
+        body=body,
+        attendees=extract_attendees(appt_item),
+        recurrence=extract_recurrence_info(appt_item),
+        categories=categories,
+        reminder_minutes=reminder_minutes,
+        sensitivity=sensitivity,
+    )
+
+
+def list_events(
+    outlook_app,
+    start_date: datetime,
+    end_date: datetime,
+    calendar_email: Optional[str] = None,
+    count: int = 100,
+) -> Iterator[EventSummary]:
+    """
+    List events from a calendar within a date range.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        start_date: Start of date range
+        end_date: End of date range
+        calendar_email: Email of shared calendar owner (None for default)
+        count: Maximum number of events to return
+
+    Yields:
+        EventSummary objects
+    """
+    calendar = get_calendar(outlook_app, calendar_email)
+    items = calendar.Items
+
+    # Important: Set IncludeRecurrences BEFORE sorting
+    items.IncludeRecurrences = True
+    items.Sort("[Start]")
+
+    # Build date filter - find events that START within the date range
+    start_str = start_date.strftime("%m/%d/%Y %H:%M %p")
+    end_str = end_date.strftime("%m/%d/%Y %H:%M %p")
+
+    restriction = f"[Start] >= '{start_str}' AND [Start] <= '{end_str}'"
+
+    try:
+        items = items.Restrict(restriction)
+    except Exception:
+        # Fall back to manual filtering if restriction fails
+        pass
+
+    yielded = 0
+    for item in items:
+        if yielded >= count:
+            break
+
+        try:
+            # Check if item is an appointment
+            if item.Class != 26:  # olAppointment
+                continue
+
+            # Manual date filtering as backup - event must start within range
+            # Convert COM datetime to naive Python datetime for comparison
+            item_start = item.Start
+            if hasattr(item_start, 'replace'):
+                # Remove timezone info for comparison (pywintypes.datetime -> naive)
+                item_start_naive = item_start.replace(tzinfo=None)
+            else:
+                item_start_naive = item_start
+
+            if item_start_naive < start_date or item_start_naive > end_date:
+                continue
+
+            yield extract_event_summary(item)
+            yielded += 1
+
+        except Exception:
+            continue
+
+
+def create_event(
+    outlook_app,
+    subject: str,
+    start: datetime,
+    duration: int = 60,
+    end: Optional[datetime] = None,
+    location: str = "",
+    body: str = "",
+    attendees: list[str] = None,
+    optional_attendees: list[str] = None,
+    all_day: bool = False,
+    reminder_minutes: int = 15,
+    busy_status: str = "busy",
+    teams_url: Optional[str] = None,
+    recurrence: Optional[dict] = None,
+) -> tuple[str, str, bool]:
+    """
+    Create a calendar event.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        subject: Event subject
+        start: Start datetime
+        duration: Duration in minutes (used if end not specified)
+        end: End datetime (overrides duration)
+        location: Event location
+        body: Event body
+        attendees: List of required attendee emails
+        optional_attendees: List of optional attendee emails
+        all_day: Whether this is an all-day event
+        reminder_minutes: Reminder time before start
+        busy_status: Show as status (free, tentative, busy, out_of_office)
+        teams_url: Optional Teams meeting URL to embed in body
+        recurrence: Optional recurrence pattern dict
+
+    Returns:
+        Tuple of (entry_id, store_id, has_attendees)
+
+    Raises:
+        OutlookError: If event creation fails
+    """
+    attendees = attendees or []
+    optional_attendees = optional_attendees or []
+
+    try:
+        appt = outlook_app.CreateItem(OL_ITEM_APPOINTMENT)
+
+        # Set basic properties
+        appt.Subject = subject
+        appt.Location = location
+
+        # Handle body with optional Teams URL
+        full_body = body
+        if teams_url:
+            teams_section = f"\n\n________________________________________________________________________________\n\nMicrosoft Teams meeting\n\nJoin on your computer, mobile app or room device\n{teams_url}\n\n________________________________________________________________________________\n"
+            full_body = body + teams_section if body else teams_section.strip()
+        appt.Body = full_body
+
+        # Set times
+        if all_day:
+            appt.AllDayEvent = True
+            appt.Start = start.date()
+            if end:
+                appt.End = end.date()
+            else:
+                appt.End = start.date()
+        else:
+            appt.Start = start
+            if end:
+                appt.End = end
+            else:
+                appt.Duration = duration
+
+        # Set reminder
+        appt.ReminderSet = True
+        appt.ReminderMinutesBeforeStart = reminder_minutes
+
+        # Set busy status
+        busy_map = {
+            "free": OL_BUSY_FREE,
+            "tentative": OL_BUSY_TENTATIVE,
+            "busy": OL_BUSY_BUSY,
+            "out_of_office": OL_BUSY_OUT_OF_OFFICE,
+            "working_elsewhere": OL_BUSY_WORKING_ELSEWHERE,
+        }
+        appt.BusyStatus = busy_map.get(busy_status, OL_BUSY_BUSY)
+
+        # Add attendees (makes it a meeting)
+        has_attendees = bool(attendees or optional_attendees)
+        if has_attendees:
+            appt.MeetingStatus = OL_MEETING_STATUS_MEETING
+
+            for addr in attendees:
+                recip = appt.Recipients.Add(addr)
+                recip.Type = 1  # olRequired
+
+            for addr in optional_attendees:
+                recip = appt.Recipients.Add(addr)
+                recip.Type = 2  # olOptional
+
+            appt.Recipients.ResolveAll()
+
+        # Set recurrence if specified
+        if recurrence:
+            pattern = appt.GetRecurrencePattern()
+
+            rec_type_map = {
+                "daily": OL_RECURS_DAILY,
+                "weekly": OL_RECURS_WEEKLY,
+                "monthly": OL_RECURS_MONTHLY,
+                "monthly_nth": OL_RECURS_MONTHLY_NTH,
+                "yearly": OL_RECURS_YEARLY,
+            }
+            pattern.RecurrenceType = rec_type_map.get(
+                recurrence.get("type", "weekly"),
+                OL_RECURS_WEEKLY
+            )
+
+            if "interval" in recurrence:
+                pattern.Interval = recurrence["interval"]
+
+            if "days_of_week" in recurrence:
+                pattern.DayOfWeekMask = _list_to_day_mask(recurrence["days_of_week"])
+
+            if "day_of_month" in recurrence:
+                pattern.DayOfMonth = recurrence["day_of_month"]
+
+            if "end_date" in recurrence:
+                pattern.PatternEndDate = recurrence["end_date"]
+                pattern.NoEndDate = False
+            elif "occurrences" in recurrence:
+                pattern.Occurrences = recurrence["occurrences"]
+                pattern.NoEndDate = False
+            else:
+                pattern.NoEndDate = True
+
+        # Save the event (don't send yet)
+        appt.Save()
+
+        return appt.EntryID, appt.Parent.StoreID, has_attendees
+
+    except Exception as e:
+        raise OutlookError(f"Failed to create event: {e}")
+
+
+def send_meeting_invites(outlook_app, entry_id: str, store_id: str) -> None:
+    """
+    Send meeting invitations for an existing event.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        entry_id: Event entry ID
+        store_id: Event store ID
+
+    Raises:
+        OutlookError: If send fails
+    """
+    try:
+        appt = get_event_by_id(outlook_app, entry_id, store_id)
+
+        if appt.MeetingStatus == OL_MEETING_STATUS_NONMEETING:
+            raise OutlookError("Cannot send invites for non-meeting event")
+
+        appt.Send()
+    except EventNotFoundError:
+        raise
+    except Exception as e:
+        raise OutlookError(f"Failed to send meeting invites: {e}")
+
+
+def respond_to_meeting(
+    outlook_app,
+    entry_id: str,
+    store_id: str,
+    response: str,
+    send_response: bool = True,
+) -> None:
+    """
+    Respond to a meeting invitation.
+
+    Args:
+        outlook_app: Outlook Application COM object
+        entry_id: Event entry ID
+        store_id: Event store ID
+        response: Response type ("accept", "decline", "tentative")
+        send_response: Whether to send response to organizer
+
+    Raises:
+        OutlookError: If response fails
+    """
+    response_map = {
+        "accept": OL_RESPONSE_ACCEPTED,
+        "decline": OL_RESPONSE_DECLINED,
+        "tentative": OL_RESPONSE_TENTATIVE,
+    }
+
+    if response not in response_map:
+        raise OutlookError(f"Invalid response: {response}. Use: accept, decline, tentative")
+
+    try:
+        appt = get_event_by_id(outlook_app, entry_id, store_id)
+
+        # Respond to the meeting
+        response_item = appt.Respond(response_map[response], True)  # fNoUI=True
+
+        if send_response and response_item:
+            response_item.Send()
+
+    except EventNotFoundError:
+        raise
+    except Exception as e:
+        raise OutlookError(f"Failed to respond to meeting: {e}")

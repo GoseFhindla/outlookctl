@@ -247,6 +247,241 @@ class DoctorResult:
         }
 
 
+# =============================================================================
+# Calendar Models
+# =============================================================================
+
+
+@dataclass
+class EventId:
+    """Stable identifier for an Outlook calendar event."""
+    entry_id: str
+    store_id: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class Attendee:
+    """Meeting attendee with response status."""
+    name: str
+    email: str
+    type: str  # "required", "optional", "resource"
+    response: str  # "none", "accepted", "declined", "tentative", "organizer"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class RecurrenceInfo:
+    """Recurrence pattern information."""
+    type: str  # "daily", "weekly", "monthly", "monthly_nth", "yearly"
+    interval: int = 1
+    days_of_week: list[str] = field(default_factory=list)  # ["monday", "wednesday"]
+    day_of_month: Optional[int] = None
+    month_of_year: Optional[int] = None
+    instance: Optional[int] = None  # For "2nd Tuesday" patterns
+    end_date: Optional[str] = None
+    occurrences: Optional[int] = None
+
+    def to_dict(self) -> dict:
+        result = {
+            "type": self.type,
+            "interval": self.interval,
+        }
+        if self.days_of_week:
+            result["days_of_week"] = self.days_of_week
+        if self.day_of_month is not None:
+            result["day_of_month"] = self.day_of_month
+        if self.month_of_year is not None:
+            result["month_of_year"] = self.month_of_year
+        if self.instance is not None:
+            result["instance"] = self.instance
+        if self.end_date:
+            result["end_date"] = self.end_date
+        if self.occurrences is not None:
+            result["occurrences"] = self.occurrences
+        return result
+
+
+@dataclass
+class EventSummary:
+    """Summary of a calendar event for list results."""
+    id: EventId
+    subject: str
+    start: str
+    end: str
+    location: str
+    organizer: str
+    is_recurring: bool
+    is_all_day: bool
+    is_meeting: bool
+    response_status: str  # "none", "organizer", "accepted", "declined", "tentative"
+    busy_status: str  # "free", "tentative", "busy", "out_of_office", "working_elsewhere"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id.to_dict(),
+            "subject": self.subject,
+            "start": self.start,
+            "end": self.end,
+            "location": self.location,
+            "organizer": self.organizer,
+            "is_recurring": self.is_recurring,
+            "is_all_day": self.is_all_day,
+            "is_meeting": self.is_meeting,
+            "response_status": self.response_status,
+            "busy_status": self.busy_status,
+        }
+
+
+@dataclass
+class EventDetail:
+    """Full event details for get command."""
+    id: EventId
+    subject: str
+    start: str
+    end: str
+    location: str
+    organizer: str
+    is_recurring: bool
+    is_all_day: bool
+    is_meeting: bool
+    response_status: str
+    busy_status: str
+    body: Optional[str] = None
+    attendees: list[Attendee] = field(default_factory=list)
+    recurrence: Optional[RecurrenceInfo] = None
+    categories: list[str] = field(default_factory=list)
+    reminder_minutes: Optional[int] = None
+    sensitivity: str = "normal"  # "normal", "personal", "private", "confidential"
+
+    def to_dict(self) -> dict:
+        result = {
+            "id": self.id.to_dict(),
+            "subject": self.subject,
+            "start": self.start,
+            "end": self.end,
+            "location": self.location,
+            "organizer": self.organizer,
+            "is_recurring": self.is_recurring,
+            "is_all_day": self.is_all_day,
+            "is_meeting": self.is_meeting,
+            "response_status": self.response_status,
+            "busy_status": self.busy_status,
+            "sensitivity": self.sensitivity,
+        }
+        if self.body is not None:
+            result["body"] = self.body
+        if self.attendees:
+            result["attendees"] = [a.to_dict() for a in self.attendees]
+        if self.recurrence:
+            result["recurrence"] = self.recurrence.to_dict()
+        if self.categories:
+            result["categories"] = self.categories
+        if self.reminder_minutes is not None:
+            result["reminder_minutes"] = self.reminder_minutes
+        return result
+
+
+@dataclass
+class CalendarListResult:
+    """Result of a calendar list operation."""
+    version: str = "1.0"
+    calendar: str = "Calendar"
+    start_date: str = ""
+    end_date: str = ""
+    items: list[EventSummary] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "version": self.version,
+            "calendar": self.calendar,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "items": [item.to_dict() for item in self.items],
+        }
+
+
+@dataclass
+class EventCreateResult:
+    """Result of creating a calendar event."""
+    version: str = "1.0"
+    success: bool = True
+    id: Optional[EventId] = None
+    saved_to: str = "Calendar"
+    subject: Optional[str] = None
+    start: Optional[str] = None
+    attendees: list[str] = field(default_factory=list)
+    is_draft: bool = True  # True if meeting not sent yet
+
+    def to_dict(self) -> dict:
+        result = {
+            "version": self.version,
+            "success": self.success,
+            "saved_to": self.saved_to,
+            "is_draft": self.is_draft,
+        }
+        if self.id:
+            result["id"] = self.id.to_dict()
+        if self.subject:
+            result["subject"] = self.subject
+        if self.start:
+            result["start"] = self.start
+        if self.attendees:
+            result["attendees"] = self.attendees
+        return result
+
+
+@dataclass
+class EventSendResult:
+    """Result of sending a meeting invitation."""
+    version: str = "1.0"
+    success: bool = True
+    message: str = ""
+    sent_at: Optional[str] = None
+    attendees: list[str] = field(default_factory=list)
+    subject: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        result = {
+            "version": self.version,
+            "success": self.success,
+            "message": self.message,
+        }
+        if self.sent_at:
+            result["sent_at"] = self.sent_at
+        if self.attendees:
+            result["attendees"] = self.attendees
+        if self.subject:
+            result["subject"] = self.subject
+        return result
+
+
+@dataclass
+class EventRespondResult:
+    """Result of responding to a meeting invitation."""
+    version: str = "1.0"
+    success: bool = True
+    response: str = ""  # "accepted", "declined", "tentative"
+    subject: Optional[str] = None
+    organizer: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        result = {
+            "version": self.version,
+            "success": self.success,
+            "response": self.response,
+        }
+        if self.subject:
+            result["subject"] = self.subject
+        if self.organizer:
+            result["organizer"] = self.organizer
+        return result
+
+
 @dataclass
 class ErrorResult:
     """Error result for any command."""
